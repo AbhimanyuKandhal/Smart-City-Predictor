@@ -61,7 +61,7 @@ export default function Dashboard({
   }
 
   // Combine historical and prediction for chart
-  const chartData = historicalData.map(d => ({
+  const chartData: any[] = historicalData.map(d => ({
     time: new Date(d.timestamp).toLocaleTimeString('en-US', { hour: 'numeric' }),
     actual_pm25: d.pm25,
     actual_temp: d.temperature_c,
