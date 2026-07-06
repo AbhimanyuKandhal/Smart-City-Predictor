@@ -1,4 +1,4 @@
-name: Hourly Smart City ML Pipeline
+name: Half-Hourly Smart City Pipeline
 
 on:
   schedule:
@@ -24,11 +24,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           
-      - name: Run ML Pipeline
+      - name: Run ETL and ML Pipelines
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
           OPENAQ_API_KEY: ${{ secrets.OPENAQ_API_KEY }}
         run: |
+          python etl_pipeline.py
           python ml_pipeline.py
+

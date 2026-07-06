@@ -1,7 +1,7 @@
 import Dashboard from "@/components/Dashboard";
 import { supabase } from "@/lib/supabase";
 
-export const revalidate = 60; // ISR 60 seconds
+export const revalidate = 0; // Disable caching for real-time dashboard
 
 export default async function Home() {
   // Fetch historical data (last 24 hours only for a cleaner chart focus)
@@ -9,7 +9,7 @@ export default async function Home() {
     .from("environmental_data")
     .select("*")
     .order("timestamp", { ascending: false })
-    .limit(24);
+    .limit(48);
 
   // Fetch the 24-hour forecast
   const { data: predictions, error: predictionError } = await supabase
