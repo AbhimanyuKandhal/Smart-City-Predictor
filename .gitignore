@@ -1,0 +1,22 @@
+# Environments
+.env
+.env.local
+.env.*.local
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Next.js
+web/node_modules/
+web/.next/
+web/out/
+web/build/
+web/.vercel/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

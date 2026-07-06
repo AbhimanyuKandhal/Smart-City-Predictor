@@ -1,0 +1,7 @@
+xgboost
+pandas
+numpy
+requests
+supabase
+python-dotenv
+scikit-learn
