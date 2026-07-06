@@ -2,7 +2,7 @@ name: Half-Hourly Smart City Pipeline
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Runs every 30 minutes
+    - cron: '14,44 * * * *'  # Runs at 14 and 44 minutes past the hour to avoid GitHub's :00 and :30 bottlenecks
   workflow_dispatch:      # Allows you to run it manually from the GitHub UI
 
 jobs:
