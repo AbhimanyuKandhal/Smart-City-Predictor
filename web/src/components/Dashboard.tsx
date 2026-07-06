@@ -102,6 +102,39 @@ export default function Dashboard({
     predicted_clouds: d.predicted_cloud_cover,
   }));
 
+  // Calculate dynamic accuracy percentage for the active metric
+  let totalError = 0;
+  let count = 0;
+  
+  accuracyChartData.forEach(d => {
+    let actual = 0, pred = 0;
+    if (activeMetric === 'pm25') { actual = d.actual_pm25; pred = d.predicted_pm25; }
+    else if (activeMetric === 'temp') { actual = d.actual_temp; pred = d.predicted_temp; }
+    else if (activeMetric === 'humidity') { actual = d.actual_humidity; pred = d.predicted_humidity; }
+    else if (activeMetric === 'wind') { actual = d.actual_wind; pred = d.predicted_wind; }
+    else if (activeMetric === 'clouds') { actual = d.actual_clouds; pred = d.predicted_clouds; }
+
+    if (actual > 0) {
+      const err = Math.abs(actual - pred) / actual;
+      totalError += Math.min(err, 1); // Cap error penalty at 100% per point
+      count++;
+    } else if (actual === 0 && pred > 0) {
+      totalError += 1;
+      count++;
+    } else {
+      count++;
+    }
+  });
+
+  const accuracyPercent = count > 0 ? Math.round((1 - (totalError / count)) * 100) : 100;
+  const getMetricColor = () => {
+    if (activeMetric === 'pm25') return '#7c3aed';
+    if (activeMetric === 'temp') return '#ea580c';
+    if (activeMetric === 'humidity') return '#0284c7';
+    if (activeMetric === 'wind') return '#0d9488';
+    return '#475569';
+  };
+
   const getAQIStatus = (pm25: number) => {
     if (pm25 <= 12) return { text: "Good", color: "text-emerald-600", dot: "bg-emerald-500" };
     if (pm25 <= 35.4) return { text: "Moderate", color: "text-amber-600", dot: "bg-amber-500" };
@@ -326,10 +359,33 @@ export default function Dashboard({
             className={`${cardClass} p-4 md:p-8 rounded-3xl`}
           >
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
-              <h2 className="text-xl font-bold flex items-center">
-                <Activity className="w-5 h-5 mr-2 opacity-70" />
-                Model Accuracy: Actual vs Predicted (Past 24H)
-              </h2>
+              <div className="flex items-center space-x-4">
+                <div className="relative flex items-center justify-center w-16 h-16">
+                  <svg className="w-full h-full transform -rotate-90">
+                    <circle cx="32" cy="32" r="26" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-slate-200" />
+                    <circle 
+                      cx="32" cy="32" r="26" 
+                      stroke={getMetricColor()} 
+                      strokeWidth="6" fill="transparent" 
+                      strokeDasharray={2 * Math.PI * 26} 
+                      strokeDashoffset={(2 * Math.PI * 26) - (accuracyPercent / 100) * (2 * Math.PI * 26)} 
+                      strokeLinecap="round"
+                      className="transition-all duration-1000 ease-out" 
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center font-black text-sm">
+                    {accuracyPercent}%
+                  </div>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold flex items-center">
+                    <Activity className="w-5 h-5 mr-2 opacity-70" />
+                    Model Accuracy: Actual vs Predicted
+                  </h2>
+                  <p className="text-xs font-semibold opacity-60 uppercase tracking-wider">Past 24 Hours</p>
+                </div>
+              </div>
+              
               <div className="flex space-x-2 text-sm font-bold">
                 <span className="flex items-center"><div className="w-3 h-3 rounded-full bg-blue-600 mr-2"/> Actual</span>
                 <span className="flex items-center ml-4"><div className="w-3 h-3 rounded-full bg-blue-300 border-2 border-blue-600 border-dashed mr-2"/> AI Prediction</span>
