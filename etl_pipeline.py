@@ -28,7 +28,10 @@ def extract_weather_data():
         data = response.json()
         return {
             "temperature_c": data["main"]["temp"],
-            "humidity_percent": data["main"]["humidity"]
+            "humidity_percent": data["main"]["humidity"],
+            "wind_speed": data.get("wind", {}).get("speed", 0),
+            "cloud_cover": data.get("clouds", {}).get("all", 0),
+            "is_raining": "rain" in data or data.get("weather", [{}])[0].get("main") == "Rain"
         }
     else:
         print(f"Error fetching weather: {response.text}")
@@ -72,7 +75,10 @@ def main():
             "timestamp": datetime.utcnow().isoformat(),
             "temperature_c": weather["temperature_c"],
             "humidity_percent": weather["humidity_percent"],
-            "pm25": aqi["pm25"]
+            "pm25": aqi["pm25"],
+            "wind_speed": weather["wind_speed"],
+            "cloud_cover": weather["cloud_cover"],
+            "is_raining": weather["is_raining"]
         }
         
         # Load
