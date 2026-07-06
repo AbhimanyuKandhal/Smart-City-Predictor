@@ -1,6 +1,7 @@
 import os
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
+import math
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
@@ -70,9 +71,9 @@ def main():
     aqi = extract_air_quality_data()
     
     if weather and aqi:
-        # Transform (Combine data)
-        payload = {
-            "timestamp": datetime.utcnow().isoformat(),
+        current_time = datetime.utcnow()
+        current_payload = {
+            "timestamp": current_time.isoformat(),
             "temperature_c": weather["temperature_c"],
             "humidity_percent": weather["humidity_percent"],
             "pm25": aqi["pm25"],
@@ -81,8 +82,44 @@ def main():
             "is_raining": weather["is_raining"]
         }
         
-        # Load
-        load_to_supabase(supabase, payload)
+        # --- Autonomous Backfilling Logic ---
+        payloads_to_insert = []
+        try:
+            res = supabase.table("environmental_data").select("*").order("timestamp", desc=True).limit(1).execute()
+            if res.data and len(res.data) > 0:
+                last_record = res.data[0]
+                last_time_str = last_record["timestamp"].replace("Z", "+00:00")
+                last_time = datetime.fromisoformat(last_time_str).replace(tzinfo=None)
+                
+                diff_minutes = (current_time - last_time).total_seconds() / 60.0
+                if diff_minutes > 45:
+                    # Calculate how many 30-minute slots we missed
+                    n_missing = int((diff_minutes - 15) // 30)
+                    if n_missing > 0:
+                        print(f"Detected {n_missing} missing intervals. Autonomous backfilling initiated...")
+                        
+                        # Linear interpolation for missing gaps
+                        for i in range(1, n_missing + 1):
+                            fraction = i / (n_missing + 1)
+                            
+                            interp_payload = {
+                                "timestamp": (last_time + timedelta(minutes=30 * i)).isoformat(),
+                                "temperature_c": round(last_record["temperature_c"] + (current_payload["temperature_c"] - last_record["temperature_c"]) * fraction, 2),
+                                "humidity_percent": round(last_record["humidity_percent"] + (current_payload["humidity_percent"] - last_record["humidity_percent"]) * fraction, 1),
+                                "pm25": round(last_record["pm25"] + (current_payload["pm25"] - last_record["pm25"]) * fraction, 2),
+                                "wind_speed": round(last_record["wind_speed"] + (current_payload["wind_speed"] - last_record["wind_speed"]) * fraction, 2),
+                                "cloud_cover": round(last_record["cloud_cover"] + (current_payload["cloud_cover"] - last_record["cloud_cover"]) * fraction, 1),
+                                "is_raining": current_payload["is_raining"] if fraction > 0.5 else last_record["is_raining"]
+                            }
+                            payloads_to_insert.append(interp_payload)
+        except Exception as e:
+            print(f"Error during backfilling check: {e}")
+            
+        # Add current payload at the end
+        payloads_to_insert.append(current_payload)
+        
+        # Load all (batch insert)
+        load_to_supabase(supabase, payloads_to_insert)
     else:
         print("Failed to fetch all required data. ETL aborted.")
 
