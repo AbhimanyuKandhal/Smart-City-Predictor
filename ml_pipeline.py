@@ -149,6 +149,53 @@ def predict_next_24_hours(reg_model, clf_model, features_list, target_cols, late
     except Exception as e:
         print("Failed to save predictions:", e)
 
+def backtest_model(reg_model, clf_model, features_list, target_cols, raw_data: pd.DataFrame, supabase: Client):
+    print("Running backtest for the last 24 hours...")
+    if len(raw_data) < 97:
+        print("Not enough data for backtesting.")
+        return
+        
+    backtest_row = raw_data.iloc[-49].copy()
+    backtest_row['pm25_lag1'] = raw_data.iloc[-50]['pm25']
+    backtest_row['pm25_lag24'] = raw_data.iloc[-97]['pm25']
+    
+    X_backtest = pd.DataFrame([backtest_row[features_list].to_dict()])
+    predictions = reg_model.predict(X_backtest)[0]
+    
+    if clf_model is not None:
+        will_rain = bool(clf_model.predict(X_backtest)[0])
+    else:
+        will_rain = False
+        
+    pred_dict = dict(zip(target_cols, predictions))
+    actuals = raw_data.iloc[-48:]
+    records = []
+    
+    for i in range(len(actuals)):
+        h = i + 1
+        actual_row = actuals.iloc[i]
+        records.append({
+            "timestamp": actual_row['timestamp'].isoformat(),
+            "actual_temp": float(actual_row['temperature_c']),
+            "predicted_temp": float(pred_dict[f'target_temp_{h}']),
+            "actual_humidity": float(actual_row['humidity_percent']),
+            "predicted_humidity": max(0, min(100, float(pred_dict[f'target_hum_{h}']))),
+            "actual_pm25": float(actual_row['pm25']),
+            "predicted_pm25": max(0, float(pred_dict[f'target_pm25_{h}'])),
+            "actual_wind_speed": float(actual_row['wind_speed']),
+            "predicted_wind_speed": max(0, float(pred_dict[f'target_wind_{h}'])),
+            "actual_cloud_cover": float(actual_row['cloud_cover']),
+            "predicted_cloud_cover": max(0, min(100, float(pred_dict[f'target_cloud_{h}']))),
+            "actual_rain": bool(actual_row['is_raining']),
+            "predicted_rain": will_rain
+        })
+        
+    try:
+        supabase.table("model_accuracy").upsert(records).execute()
+        print("Successfully backtested and saved accuracy data to Supabase.")
+    except Exception as e:
+        print("Failed to save accuracy data:", e)
+
 def main():
     print(f"[{datetime.now()}] Starting V3 ML Pipeline (48-Step Forecast + Rain)...")
     supabase = init_supabase()
@@ -166,6 +213,7 @@ def main():
     latest_row['pm25_lag24'] = raw_data.iloc[-49]['pm25'] if len(raw_data) > 48 else latest_row['pm25']
     
     predict_next_24_hours(reg_model, clf_model, features, target_cols, latest_row, supabase)
+    backtest_model(reg_model, clf_model, features, target_cols, raw_data, supabase)
 
 if __name__ == "__main__":
     main()

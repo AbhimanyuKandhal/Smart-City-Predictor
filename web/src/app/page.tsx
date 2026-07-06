@@ -17,8 +17,15 @@ export default async function Home() {
     .select("*")
     .order("target_timestamp", { ascending: true });
 
-  if (historyError || predictionError) {
-    console.error("Database Error:", historyError || predictionError);
+  // Fetch the accuracy log
+  const { data: accuracyData, error: accuracyError } = await supabase
+    .from("model_accuracy")
+    .select("*")
+    .order("timestamp", { ascending: false })
+    .limit(48);
+
+  if (historyError || predictionError || accuracyError) {
+    console.error("Database Error:", historyError || predictionError || accuracyError);
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50 text-slate-800">
         <div className="p-8 bg-white shadow-xl rounded-2xl text-center border border-gray-200">
@@ -34,7 +41,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen flex items-center justify-center p-4">
-      <Dashboard historicalData={sortedHistory} hourlyPredictions={predictions || []} />
+      <Dashboard historicalData={sortedHistory} hourlyPredictions={predictions || []} accuracyData={(accuracyData || []).reverse()} />
     </main>
   );
 }

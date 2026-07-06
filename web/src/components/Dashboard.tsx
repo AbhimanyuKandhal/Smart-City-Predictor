@@ -27,10 +27,12 @@ interface PredictionData {
 
 export default function Dashboard({ 
   historicalData, 
-  hourlyPredictions 
+  hourlyPredictions,
+  accuracyData = []
 }: { 
   historicalData: EnvData[], 
-  hourlyPredictions: PredictionData[] 
+  hourlyPredictions: PredictionData[],
+  accuracyData?: any[]
 }) {
   const latestData = historicalData[historicalData.length - 1];
   const [activeMetric, setActiveMetric] = useState<'pm25'|'temp'|'humidity'|'wind'|'clouds'>('pm25');
@@ -85,6 +87,20 @@ export default function Dashboard({
       predicted_clouds: p.predicted_cloud_cover || 0,
     });
   });
+
+  const accuracyChartData = accuracyData.map(d => ({
+    time: new Date(d.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+    actual_pm25: d.actual_pm25,
+    predicted_pm25: d.predicted_pm25,
+    actual_temp: d.actual_temp,
+    predicted_temp: d.predicted_temp,
+    actual_humidity: d.actual_humidity,
+    predicted_humidity: d.predicted_humidity,
+    actual_wind: d.actual_wind_speed,
+    predicted_wind: d.predicted_wind_speed,
+    actual_clouds: d.actual_cloud_cover,
+    predicted_clouds: d.predicted_cloud_cover,
+  }));
 
   const getAQIStatus = (pm25: number) => {
     if (pm25 <= 12) return { text: "Good", color: "text-emerald-600", dot: "bg-emerald-500" };
@@ -300,6 +316,72 @@ export default function Dashboard({
             </div>
           </div>
         </motion.div>
+
+        {/* Accuracy Chart Section */}
+        {accuracyChartData.length > 0 && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.6 }}
+            className={`${cardClass} p-4 md:p-8 rounded-3xl`}
+          >
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
+              <h2 className="text-xl font-bold flex items-center">
+                <Activity className="w-5 h-5 mr-2 opacity-70" />
+                Model Accuracy: Actual vs Predicted (Past 24H)
+              </h2>
+              <div className="flex space-x-2 text-sm font-bold">
+                <span className="flex items-center"><div className="w-3 h-3 rounded-full bg-blue-600 mr-2"/> Actual</span>
+                <span className="flex items-center ml-4"><div className="w-3 h-3 rounded-full bg-blue-300 border-2 border-blue-600 border-dashed mr-2"/> AI Prediction</span>
+              </div>
+            </div>
+
+            <div className="h-[400px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={accuracyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" opacity={0.15} />
+                  <XAxis dataKey="time" stroke="currentColor" opacity={0.6} tick={{fontSize: 12, fontWeight: 600}} minTickGap={30} />
+                  <YAxis stroke="currentColor" opacity={0.6} tick={{fontSize: 12, fontWeight: 600}} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                    itemStyle={{ color: '#0f172a', fontWeight: 700 }}
+                  />
+                  
+                  {activeMetric === 'pm25' && (
+                    <>
+                      <Area type="monotone" dataKey="actual_pm25" stroke="#7c3aed" strokeWidth={4} fillOpacity={0.1} fill="#7c3aed" name="Actual PM2.5" />
+                      <Area type="monotone" dataKey="predicted_pm25" stroke="#7c3aed" strokeWidth={4} strokeDasharray="6 6" fillOpacity={0} name="Predicted PM2.5" />
+                    </>
+                  )}
+                  {activeMetric === 'temp' && (
+                    <>
+                      <Area type="monotone" dataKey="actual_temp" stroke="#ea580c" strokeWidth={4} fillOpacity={0.1} fill="#ea580c" name="Actual Temp" />
+                      <Area type="monotone" dataKey="predicted_temp" stroke="#ea580c" strokeWidth={4} strokeDasharray="6 6" fillOpacity={0} name="Predicted Temp" />
+                    </>
+                  )}
+                  {activeMetric === 'humidity' && (
+                    <>
+                      <Area type="monotone" dataKey="actual_humidity" stroke="#0284c7" strokeWidth={4} fillOpacity={0.1} fill="#0284c7" name="Actual Humidity" />
+                      <Area type="monotone" dataKey="predicted_humidity" stroke="#0284c7" strokeWidth={4} strokeDasharray="6 6" fillOpacity={0} name="Predicted Humidity" />
+                    </>
+                  )}
+                  {activeMetric === 'wind' && (
+                    <>
+                      <Area type="monotone" dataKey="actual_wind" stroke="#0d9488" strokeWidth={4} fillOpacity={0.1} fill="#0d9488" name="Actual Wind (m/s)" />
+                      <Area type="monotone" dataKey="predicted_wind" stroke="#0d9488" strokeWidth={4} strokeDasharray="6 6" fillOpacity={0} name="Predicted Wind" />
+                    </>
+                  )}
+                  {activeMetric === 'clouds' && (
+                    <>
+                      <Area type="monotone" dataKey="actual_clouds" stroke="#475569" strokeWidth={4} fillOpacity={0.1} fill="#475569" name="Actual Clouds (%)" />
+                      <Area type="monotone" dataKey="predicted_clouds" stroke="#475569" strokeWidth={4} strokeDasharray="6 6" fillOpacity={0} name="Predicted Clouds" />
+                    </>
+                  )}
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+        )}
       </div>
     </div>
   );
