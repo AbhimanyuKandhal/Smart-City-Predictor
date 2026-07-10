@@ -65,7 +65,7 @@ Following the ETL pipeline, the `ml_pipeline.py` script executes. It does **not*
 4. Predicts weather conditions 24 hours into the future.
 
 #### Why XGBoost?
-We selected XGBoost over Deep Learning models (like LSTMs) because:
+I selected XGBoost over Deep Learning models (like LSTMs) because:
 - **Tabular Superiority:** Gradient boosted trees notoriously outperform neural networks on small-to-medium tabular datasets.
 - **Explainability:** Tree-based models allow for instantaneous extraction of feature importances, completely eliminating the need for expensive post-hoc SHAP calculations.
 - **Speed:** The entire pipeline (fetching, training 5 models, forecasting, and backtesting) executes in under 20 seconds on a standard GitHub Action runner.
