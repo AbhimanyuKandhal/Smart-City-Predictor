@@ -32,7 +32,10 @@ def fetch_all_data(supabase: Client, location: str) -> pd.DataFrame:
     df = pd.DataFrame(all_data)
     if not df.empty:
         df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
-        df = df.sort_values('timestamp').reset_index(drop=True)
+        # Resample to 1-hour intervals to normalize past 30-min data and future 1-hr data
+        df = df.set_index('timestamp').resample('1h').mean(numeric_only=True).interpolate(method='linear')
+        df = df.reset_index()
+        df['location'] = location
     return df
 
 def prepare_features(df: pd.DataFrame):
