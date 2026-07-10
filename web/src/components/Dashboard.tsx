@@ -41,12 +41,18 @@ export default function Dashboard({
   const temp = latestData?.temperature_c || 25;
   const humidity = latestData?.humidity_percent || 50;
   const aqi = latestData?.pm25 || 20;
+  const isRaining = latestData?.is_raining || false;
+  const cloudCover = latestData?.cloud_cover || 0;
   
   let themeClass = "bg-gradient-to-br from-blue-50 to-slate-100 text-slate-900"; 
   let cardClass = "bg-white/60 backdrop-blur-xl border border-slate-200 shadow-xl";
   let bgImage = "/sun.png";
 
-  if (aqi > 150) {
+  if (isRaining || (humidity > 80 && temp > 15 && cloudCover > 70)) {
+    themeClass = "bg-gradient-to-br from-slate-200 via-blue-100 to-indigo-100 text-slate-900";
+    cardClass = "bg-white/60 backdrop-blur-xl border border-blue-300 shadow-xl";
+    bgImage = "/rain.png";
+  } else if (aqi > 150) {
     themeClass = "bg-gradient-to-br from-stone-200 via-yellow-100 to-orange-100 text-stone-900";
     cardClass = "bg-white/50 backdrop-blur-xl border border-yellow-300 shadow-xl";
     bgImage = "/smog.png";
@@ -54,10 +60,6 @@ export default function Dashboard({
     themeClass = "bg-gradient-to-br from-slate-100 via-blue-50 to-cyan-100 text-slate-900";
     cardClass = "bg-white/60 backdrop-blur-xl border border-cyan-200 shadow-xl";
     bgImage = "/snow.png";
-  } else if (humidity > 80 && temp > 15) {
-    themeClass = "bg-gradient-to-br from-slate-200 via-blue-100 to-indigo-100 text-slate-900";
-    cardClass = "bg-white/60 backdrop-blur-xl border border-blue-300 shadow-xl";
-    bgImage = "/rain.png";
   } else if (temp > 35) {
     themeClass = "bg-gradient-to-br from-amber-100 via-orange-100 to-red-100 text-amber-950";
     cardClass = "bg-white/60 backdrop-blur-xl border border-orange-300 shadow-xl";
