@@ -9,7 +9,6 @@
 
 It actively ingests API telemetry, trains specialized models on-the-fly, and presents the intelligence on a frosted-glass interactive dashboard.
 
-*(Insert 30-second Demo GIF here)*
 
 ---
 
