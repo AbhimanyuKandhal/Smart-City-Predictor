@@ -10,29 +10,26 @@ export default async function Home({
 }) {
   const params = await searchParams;
   const location = typeof params.location === 'string' ? params.location : "Central Delhi";
+  const dateStr = typeof params.date === 'string' ? params.date : null;
 
-  // Fetch historical data (last 24 hours only for a cleaner chart focus)
-  const { data: historicalData, error: historyError } = await supabase
-    .from("environmental_data")
-    .select("*")
-    .eq("location", location)
-    .order("timestamp", { ascending: false })
-    .limit(24);
+  let historyQuery = supabase.from("environmental_data").select("*").eq("location", location).order("timestamp", { ascending: false }).limit(24);
+  let accuracyQuery = supabase.from("model_accuracy").select("*").eq("location", location).order("timestamp", { ascending: false }).limit(24);
 
-  // Fetch the 24-hour forecast
+  if (dateStr) {
+    historyQuery = historyQuery.lte("timestamp", dateStr);
+    accuracyQuery = accuracyQuery.lte("timestamp", dateStr);
+  }
+
+  const { data: historicalData, error: historyError } = await historyQuery;
+
+  // Fetch the 24-hour forecast (note: only latest forecast is stored in DB)
   const { data: predictions, error: predictionError } = await supabase
     .from("hourly_predictions")
     .select("*")
     .eq("location", location)
     .order("target_timestamp", { ascending: true });
 
-  // Fetch the accuracy log
-  const { data: accuracyData, error: accuracyError } = await supabase
-    .from("model_accuracy")
-    .select("*")
-    .eq("location", location)
-    .order("timestamp", { ascending: false })
-    .limit(24);
+  const { data: accuracyData, error: accuracyError } = await accuracyQuery;
 
   if (historyError || predictionError || accuracyError) {
     console.error("Database Error:", historyError || predictionError || accuracyError);

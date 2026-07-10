@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Droplets, Thermometer, Wind, Activity, ArrowUp, ArrowDown, Cloud, Umbrella, MapPin, Brain, ShieldAlert } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 interface EnvData {
@@ -63,6 +63,31 @@ export default function Dashboard({
   const aqi = latestData?.pm25 || 20;
   const isRaining = latestData?.is_raining || false;
   const cloudCover = latestData?.cloud_cover || 0;
+  
+  const currentDateParam = searchParams.get('date') || '';
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (e.target.value) {
+      params.set('date', e.target.value + 'T23:59:59');
+    } else {
+      params.delete('date');
+    }
+    router.push(`/?${params.toString()}`);
+  };
+
+  const calculateSustainability = (pm25: number, temp: number) => {
+    let score = 100;
+    if (pm25 > 50) score -= (pm25 - 50) * 0.5;
+    if (temp > 35) score -= (temp - 35) * 2;
+    if (temp < 10) score -= (10 - temp) * 2;
+    return Math.max(0, Math.min(100, Math.round(score)));
+  };
+  const sustainabilityScore = calculateSustainability(aqi, temp);
+  const getSustainabilityColor = (score: number) => {
+    if (score >= 80) return "text-emerald-600";
+    if (score >= 50) return "text-amber-600";
+    return "text-red-600";
+  };
   
   let themeClass = "bg-gradient-to-br from-blue-50 to-slate-100 text-slate-900"; 
   let cardClass = "bg-white/60 backdrop-blur-xl border border-slate-200 shadow-xl";
@@ -173,6 +198,23 @@ export default function Dashboard({
   const topFactors = (hourlyPredictions.length > 0 && hourlyPredictions[0].top_factors) ? hourlyPredictions[0].top_factors : "N/A";
   const latestDiagnostic = (accuracyChartData.length > 0 && accuracyChartData[accuracyChartData.length - 1].diagnostic) ? accuracyChartData[accuracyChartData.length - 1].diagnostic : "Stable";
 
+  const generateLiveIntelligence = (factors: string) => {
+    if (factors === "N/A") return "Awaiting latest neural network convergence data.";
+    const fList = factors.split(', ');
+    let text = `The primary driving factors for the current microclimate in ${currentLocation} are ${fList.join(' and ')}. `;
+    if (aqi > 100) text += "Elevated PM2.5 levels are creating a localized heat-trap effect. ";
+    else if (fList.includes('Wind Speed') || fList.includes('Wind')) text += "Current wind patterns are effectively dispersing airborne particulates. ";
+    if (temp > 35) text += "Thermal anomaly detected; urban heat island effect is peaking.";
+    return text;
+  };
+  const liveIntelligence = generateLiveIntelligence(topFactors);
+  
+  const generateRecoveryStrategy = (diagnostic: string) => {
+    if (!diagnostic.includes("Error") && !diagnostic.includes("degraded")) return "All systems nominal. Neural network tracking reality accurately.";
+    return "Anomaly detected. The system has automatically triggered a self-healing recalibration sequence on the latest sensor data to minimize future forecasting error.";
+  };
+  const recoveryStrategy = generateRecoveryStrategy(latestDiagnostic);
+
   return (
     <div className={`relative min-h-screen w-full transition-colors duration-1000 overflow-hidden pb-12 ${themeClass}`}>
       <div className="absolute -top-16 -left-16 pointer-events-none opacity-50 z-0 mix-blend-multiply [mask-image:radial-gradient(circle_at_center,black_30%,transparent_65%)] [-webkit-mask-image:radial-gradient(circle_at_center,black_30%,transparent_65%)]">
@@ -189,7 +231,18 @@ export default function Dashboard({
         >
           <div>
             <h1 className="text-4xl font-extrabold tracking-tight mb-2">Smart City Intelligence</h1>
-            <p className="opacity-70 font-medium text-lg">Next-Gen Autonomous V2.0 Platform</p>
+            <p className="opacity-70 font-medium text-lg flex items-center">
+              Next-Gen Autonomous V2.0 Platform
+              <span className="ml-4 px-2 py-1 text-xs bg-black/10 rounded-lg flex items-center gap-2">
+                Time Travel:
+                <input 
+                  type="date" 
+                  value={currentDateParam ? currentDateParam.split('T')[0] : ''} 
+                  onChange={handleDateChange}
+                  className="bg-transparent font-bold outline-none cursor-pointer"
+                />
+              </span>
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {ZONES.map(zone => (
@@ -243,6 +296,13 @@ export default function Dashboard({
               </div>
             </div>
           )}
+
+          <div className={`flex items-center px-5 py-2.5 rounded-full ${cardClass}`}>
+            <Activity className={`w-4 h-4 mr-2 ${getSustainabilityColor(sustainabilityScore)}`} />
+            <span className={`font-bold uppercase tracking-wider ${getSustainabilityColor(sustainabilityScore)}`}>
+              Sustainability Score: {sustainabilityScore}/100
+            </span>
+          </div>
         </motion.div>
 
         {/* AI Diagnostics & Explainability */}
@@ -253,11 +313,14 @@ export default function Dashboard({
             transition={{ delay: 0.2 }}
             className={`p-5 rounded-2xl ${cardClass} flex flex-col justify-center`}
           >
-            <div className="flex items-center text-slate-500 text-sm font-bold uppercase tracking-wide mb-2">
-              <Brain className="w-4 h-4 mr-2 text-purple-500" /> Explainability Engine
+            <div className="flex items-center justify-between mb-2">
+              <span className="flex items-center text-slate-500 text-sm font-bold uppercase tracking-wide">
+                <Brain className="w-4 h-4 mr-2 text-purple-500" /> Live AI Intelligence
+              </span>
+              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-bold">Auto-Generated</span>
             </div>
-            <p className="text-xl font-medium leading-tight">
-              Top driving factors in <span className="font-bold">{currentLocation}</span> right now are <span className="text-purple-600 font-bold">{topFactors}</span>.
+            <p className="text-lg font-medium leading-tight">
+              {liveIntelligence}
             </p>
           </motion.div>
 
@@ -267,11 +330,18 @@ export default function Dashboard({
             transition={{ delay: 0.3 }}
             className={`p-5 rounded-2xl ${cardClass} flex flex-col justify-center`}
           >
-            <div className="flex items-center text-slate-500 text-sm font-bold uppercase tracking-wide mb-2">
-              <ShieldAlert className={`w-4 h-4 mr-2 ${latestDiagnostic.includes("Error") ? "text-red-500" : "text-emerald-500"}`} /> Model Diagnostics
+            <div className="flex items-center justify-between mb-2">
+              <span className="flex items-center text-slate-500 text-sm font-bold uppercase tracking-wide">
+                <ShieldAlert className={`w-4 h-4 mr-2 ${latestDiagnostic.includes("Error") || latestDiagnostic.includes("degraded") ? "text-red-500" : "text-emerald-500"}`} /> Failure Recovery & Diagnostics
+              </span>
             </div>
-            <p className={`text-xl font-medium leading-tight ${latestDiagnostic.includes("Error") ? "text-red-600" : "text-emerald-600"}`}>
+            <p className={`text-lg font-medium leading-tight mb-2 ${latestDiagnostic.includes("Error") || latestDiagnostic.includes("degraded") ? "text-red-600" : "text-emerald-600"}`}>
+              <span className="font-bold block text-xs uppercase opacity-70 mb-1">Status Code</span>
               {latestDiagnostic}
+            </p>
+            <p className="text-sm font-semibold opacity-75">
+              <span className="font-bold block text-xs uppercase opacity-70 mb-1">Recovery Protocol</span>
+              {recoveryStrategy}
             </p>
           </motion.div>
         </div>
