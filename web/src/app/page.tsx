@@ -6,9 +6,10 @@ export const revalidate = 0; // Disable caching for real-time dashboard
 export default async function Home({
   searchParams,
 }: {
-  searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const location = typeof searchParams.location === 'string' ? searchParams.location : "Central Delhi";
+  const params = await searchParams;
+  const location = typeof params.location === 'string' ? params.location : "Central Delhi";
 
   // Fetch historical data (last 24 hours only for a cleaner chart focus)
   const { data: historicalData, error: historyError } = await supabase
