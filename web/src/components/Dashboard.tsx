@@ -170,8 +170,8 @@ export default function Dashboard({
   const minTempObj = hourlyPredictions.length > 0 ? hourlyPredictions.reduce((min, p) => p.predicted_temp < min.predicted_temp ? p : min, hourlyPredictions[0]) : null;
   
   const willRain = hourlyPredictions.length > 0 ? hourlyPredictions[0].will_rain_next_24h : false;
-  const topFactors = hourlyPredictions.length > 0 ? hourlyPredictions[0].top_factors : "N/A";
-  const latestDiagnostic = accuracyChartData.length > 0 ? accuracyChartData[accuracyChartData.length - 1].diagnostic : "Stable";
+  const topFactors = (hourlyPredictions.length > 0 && hourlyPredictions[0].top_factors) ? hourlyPredictions[0].top_factors : "N/A";
+  const latestDiagnostic = (accuracyChartData.length > 0 && accuracyChartData[accuracyChartData.length - 1].diagnostic) ? accuracyChartData[accuracyChartData.length - 1].diagnostic : "Stable";
 
   return (
     <div className={`relative min-h-screen w-full transition-colors duration-1000 overflow-hidden pb-12 ${themeClass}`}>
