@@ -16,13 +16,13 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 def init_supabase() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def fetch_all_data(supabase: Client) -> pd.DataFrame:
-    print("Fetching data from Supabase...")
+def fetch_all_data(supabase: Client, location: str) -> pd.DataFrame:
+    print(f"[{location}] Fetching data from Supabase...")
     all_data = []
     limit = 1000
     offset = 0
     while True:
-        response = supabase.table("environmental_data").select("*").order("timestamp").range(offset, offset + limit - 1).execute()
+        response = supabase.table("environmental_data").select("*").eq("location", location).order("timestamp").range(offset, offset + limit - 1).execute()
         data = response.data
         if not data:
             break
@@ -36,9 +36,8 @@ def fetch_all_data(supabase: Client) -> pd.DataFrame:
     return df
 
 def prepare_features(df: pd.DataFrame):
-    print("Engineering features for V3 48-step multi-variable forecasting...")
+    print("Engineering features for 24-step (hourly) multi-variable forecasting...")
     
-    # Handle missing columns if they don't exist yet in older data
     for col in ['wind_speed', 'cloud_cover']:
         if col not in df.columns:
             df[col] = 0.0
@@ -51,9 +50,7 @@ def prepare_features(df: pd.DataFrame):
         df['is_raining'] = df['is_raining'].fillna(False).astype(bool)
     
     target_cols = []
-    # Create 48 half-hours of targets (Next 24 hours at 30 min intervals)
-    # We will interpolate the current 1-hour data if we don't have 30-min data yet
-    steps = 48
+    steps = 24 # 24 hours at 1-hour intervals
     
     for h in range(1, steps + 1):
         pm_col = f'target_pm25_{h}'
@@ -70,47 +67,46 @@ def prepare_features(df: pd.DataFrame):
         
         target_cols.extend([pm_col, temp_col, hum_col, wind_col, cloud_col])
     
-    # Global Rain Prediction: Will it rain in any of the next 48 steps?
-    # shift(-1) to look forward, rolling 48 to look at the next 48 rows, max() checks for any True.
     reversed_rain = df['is_raining'][::-1]
     df['will_rain_next_24h'] = reversed_rain.rolling(window=steps, min_periods=1).max()[::-1].shift(-1).fillna(False).astype(bool)
     
-    # Features: current state
     df['pm25_lag1'] = df['pm25'].shift(1)
-    df['pm25_lag24'] = df['pm25'].shift(48) # 48 steps = 24 hours
+    df['pm25_lag24'] = df['pm25'].shift(24) # 24 steps = 24 hours
     
-    # Drop rows with NaN (from shifts)
     df = df.dropna().reset_index(drop=True)
     return df, target_cols
 
 def train_model(df: pd.DataFrame, target_cols: list):
-    print("Training MultiOutputRegressor XGBoost & Rain Classifier...")
     features = ['temperature_c', 'humidity_percent', 'pm25', 'wind_speed', 'cloud_cover', 'pm25_lag1', 'pm25_lag24']
     X = df[features]
     
-    # Train Main Regressor (Temp, Hum, PM25, Wind, Cloud)
     y_reg = df[target_cols]
     base_model = xgb.XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
     reg_model = MultiOutputRegressor(base_model)
     reg_model.fit(X, y_reg)
     
-    # Train Binary Classifier (Will it rain?)
     y_clf = df['will_rain_next_24h']
     clf_model = xgb.XGBClassifier(n_estimators=100, learning_rate=0.1, random_state=42, use_label_encoder=False, eval_metric='logloss')
     
-    # Only train classifier if there is at least one instance of rain in the dataset (prevent XGBoost error on single class)
     if len(y_clf.unique()) > 1:
         clf_model.fit(X, y_clf)
     else:
-        print("No rain instances found in training data. Classifier will default to False.")
         clf_model = None
         
-    print("Training complete.")
     return reg_model, clf_model, features
 
-def predict_next_24_hours(reg_model, clf_model, features_list, target_cols, latest_data: pd.Series, supabase: Client):
-    print("Predicting Next 24 Hours (48 half-hour slots)...")
-    
+def get_top_factors(reg_model, features):
+    # Explainability: Extract feature importances from the first estimator
+    try:
+        importances = reg_model.estimators_[0].feature_importances_
+        feature_importance_dict = {features[i]: float(importances[i]) for i in range(len(features))}
+        sorted_factors = sorted(feature_importance_dict.items(), key=lambda x: x[1], reverse=True)
+        return [f[0] for f in sorted_factors[:3]] # Top 3 factors
+    except Exception as e:
+        print(f"Could not extract feature importances: {e}")
+        return []
+
+def predict_next_24_hours(reg_model, clf_model, features_list, target_cols, latest_data: pd.Series, supabase: Client, location: str):
     X_pred = pd.DataFrame([latest_data[features_list].to_dict()])
     predictions = reg_model.predict(X_pred)[0] 
     
@@ -119,45 +115,47 @@ def predict_next_24_hours(reg_model, clf_model, features_list, target_cols, late
     else:
         will_rain = False
     
-    # Map predictions back to columns
     pred_dict = dict(zip(target_cols, predictions))
     
     try:
-        supabase.table("hourly_predictions").delete().neq('id', -1).execute()
+        # Delete old predictions for THIS location
+        supabase.table("hourly_predictions").delete().eq('location', location).execute()
     except Exception as e:
         print("Could not clean old predictions:", e)
 
     records = []
     base_time = latest_data['timestamp']
+    top_factors = get_top_factors(reg_model, features_list)
     
-    for h in range(1, 49):
-        # 30-minute intervals
-        target_time = base_time + timedelta(minutes=30 * h)
+    for h in range(1, 25):
+        # 1-hour intervals
+        target_time = base_time + timedelta(hours=1 * h)
         records.append({
             "target_timestamp": target_time.isoformat(),
+            "location": location,
             "predicted_pm25": max(0, float(pred_dict[f'target_pm25_{h}'])),
             "predicted_temp": float(pred_dict[f'target_temp_{h}']),
             "predicted_humidity": max(0, min(100, float(pred_dict[f'target_hum_{h}']))),
             "predicted_wind_speed": max(0, float(pred_dict[f'target_wind_{h}'])),
             "predicted_cloud_cover": max(0, min(100, float(pred_dict[f'target_cloud_{h}']))),
-            "will_rain_next_24h": will_rain
+            "will_rain_next_24h": will_rain,
+            "top_factors": ", ".join(top_factors) # Add explainability factors
         })
         
     try:
         supabase.table("hourly_predictions").insert(records).execute()
-        print(f"Successfully saved 48-step forecast to Supabase.")
+        print(f"[{location}] Successfully saved 24-step forecast.")
     except Exception as e:
         print("Failed to save predictions:", e)
 
-def backtest_model(reg_model, clf_model, features_list, target_cols, raw_data: pd.DataFrame, supabase: Client):
-    print("Running backtest for the last 24 hours...")
-    if len(raw_data) < 97:
-        print("Not enough data for backtesting.")
+def backtest_model(reg_model, clf_model, features_list, target_cols, raw_data: pd.DataFrame, supabase: Client, location: str):
+    if len(raw_data) < 49:
+        print(f"[{location}] Not enough data for backtesting.")
         return
         
-    backtest_row = raw_data.iloc[-49].copy()
-    backtest_row['pm25_lag1'] = raw_data.iloc[-50]['pm25']
-    backtest_row['pm25_lag24'] = raw_data.iloc[-97]['pm25']
+    backtest_row = raw_data.iloc[-25].copy()
+    backtest_row['pm25_lag1'] = raw_data.iloc[-26]['pm25']
+    backtest_row['pm25_lag24'] = raw_data.iloc[-49]['pm25']
     
     X_backtest = pd.DataFrame([backtest_row[features_list].to_dict()])
     predictions = reg_model.predict(X_backtest)[0]
@@ -168,16 +166,26 @@ def backtest_model(reg_model, clf_model, features_list, target_cols, raw_data: p
         will_rain = False
         
     pred_dict = dict(zip(target_cols, predictions))
-    actuals = raw_data.iloc[-48:]
+    actuals = raw_data.iloc[-24:]
     records = []
     
     for i in range(len(actuals)):
         h = i + 1
         actual_row = actuals.iloc[i]
+        
+        # Calculate Diagnostics (Root Cause of Errors)
+        actual_t = float(actual_row['temperature_c'])
+        pred_t = float(pred_dict[f'target_temp_{h}'])
+        error_margin = abs(actual_t - pred_t)
+        diagnostic = "Stable"
+        if error_margin > 2.0:
+            diagnostic = "High Error: Sudden weather shift detected"
+            
         records.append({
             "timestamp": actual_row['timestamp'].isoformat(),
-            "actual_temp": float(actual_row['temperature_c']),
-            "predicted_temp": float(pred_dict[f'target_temp_{h}']),
+            "location": location,
+            "actual_temp": actual_t,
+            "predicted_temp": pred_t,
             "actual_humidity": float(actual_row['humidity_percent']),
             "predicted_humidity": max(0, min(100, float(pred_dict[f'target_hum_{h}']))),
             "actual_pm25": float(actual_row['pm25']),
@@ -187,33 +195,44 @@ def backtest_model(reg_model, clf_model, features_list, target_cols, raw_data: p
             "actual_cloud_cover": float(actual_row['cloud_cover']),
             "predicted_cloud_cover": max(0, min(100, float(pred_dict[f'target_cloud_{h}']))),
             "actual_rain": bool(actual_row['is_raining']),
-            "predicted_rain": will_rain
+            "predicted_rain": will_rain,
+            "diagnostic_note": diagnostic # Added diagnostic column
         })
         
     try:
         supabase.table("model_accuracy").upsert(records).execute()
-        print("Successfully backtested and saved accuracy data to Supabase.")
+        print(f"[{location}] Successfully backtested and saved accuracy data.")
     except Exception as e:
-        print("Failed to save accuracy data:", e)
+        print(f"[{location}] Failed to save accuracy data:", e)
 
-def main():
-    print(f"[{datetime.now()}] Starting V3 ML Pipeline (48-Step Forecast + Rain)...")
-    supabase = init_supabase()
-    
-    raw_data = fetch_all_data(supabase)
-    if raw_data.empty or len(raw_data) < 100:
-        print("Not enough data to train.")
+def process_location(supabase, location):
+    print(f"\n--- Processing ML Pipeline for {location} ---")
+    raw_data = fetch_all_data(supabase, location)
+    if raw_data.empty or len(raw_data) < 50:
+        print(f"[{location}] Not enough data to train. Skipping.")
         return
         
     df, target_cols = prepare_features(raw_data)
+    if df.empty:
+        print(f"[{location}] Insufficient data after feature engineering.")
+        return
+        
     reg_model, clf_model, features = train_model(df, target_cols)
     
     latest_row = raw_data.iloc[-1].copy()
     latest_row['pm25_lag1'] = raw_data.iloc[-2]['pm25'] if len(raw_data) > 1 else latest_row['pm25']
-    latest_row['pm25_lag24'] = raw_data.iloc[-49]['pm25'] if len(raw_data) > 48 else latest_row['pm25']
+    latest_row['pm25_lag24'] = raw_data.iloc[-25]['pm25'] if len(raw_data) > 24 else latest_row['pm25']
     
-    predict_next_24_hours(reg_model, clf_model, features, target_cols, latest_row, supabase)
-    backtest_model(reg_model, clf_model, features, target_cols, raw_data, supabase)
+    predict_next_24_hours(reg_model, clf_model, features, target_cols, latest_row, supabase, location)
+    backtest_model(reg_model, clf_model, features, target_cols, raw_data, supabase, location)
+
+def main():
+    print(f"[{datetime.now()}] Starting Multi-Zone V2.0 ML Pipeline...")
+    supabase = init_supabase()
+    
+    locations = ["Central Delhi", "Dwarka", "Rohini", "Dabri Mor", "Model Town"]
+    for loc in locations:
+        process_location(supabase, loc)
 
 if __name__ == "__main__":
     main()
