@@ -211,7 +211,7 @@ export default function Dashboard({
   
   const generateRecoveryStrategy = (diagnostic: string) => {
     if (!diagnostic.includes("Error") && !diagnostic.includes("degraded")) return "All systems nominal. Neural network tracking reality accurately.";
-    return "Anomaly detected. The system has automatically triggered a self-healing recalibration sequence on the latest sensor data to minimize future forecasting error.";
+    return "Anomaly detected. The system has automatically triggered a self-healing recalibration sequence on the latest API telemetry streams to minimize future forecasting error.";
   };
   const recoveryStrategy = generateRecoveryStrategy(latestDiagnostic);
 
