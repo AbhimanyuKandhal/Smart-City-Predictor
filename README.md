@@ -5,13 +5,28 @@
 ![XGBoost](https://img.shields.io/badge/XGBoost-1.7-green?logo=xgboost)
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase)
 
-The **Smart City Intelligence Platform** is an autonomous, self-healing machine learning system designed to predict and diagnose urban micro-climates in real-time. It actively ingests environmental telemetry across 5 distinct city zones, trains specialized AI models on-the-fly, and presents the intelligence on a frosted-glass interactive dashboard.
+**Smart City Intelligence Platform is a real-time environmental intelligence system that predicts weather conditions across five regions of Delhi, explains the reasoning behind each prediction, continuously evaluates its own performance, and automatically retrains itself when prediction quality degrades.**
+
+It actively ingests environmental telemetry, trains specialized AI models on-the-fly, and presents the intelligence on a frosted-glass interactive dashboard.
+
+---
+
+## 📊 Key Performance Indicators & Features
+
+The frontend is built in React / Next.js and visualizes intelligence via strategic KPIs:
+
+- **Sustainability Score (0-100):** A custom composite metric designed to evaluate the city's real-time climate health. 
+  *Formula:* `Base Score (100) - (PM2.5 Excess Penalty) - (Extreme Heat/Cold Penalty)`. It heavily penalizes the city for extreme PM2.5 pollution levels and extreme temperature anomalies (urban heat islands). A high score indicates a clean, thermally balanced environment.
+- **Explainability Engine (AI Insights):** Rather than just presenting raw numbers, the platform outputs natural intelligence. By analyzing which nodes split the most during training, the AI determines the exact "Top Driving Factors" for the current forecast and outputs readable insights like: 
+  > *"Current wind patterns are effectively dispersing airborne particulates."*
+- **Model Accuracy Ring:** A dynamic SVG ring that plots the exact percentage of accuracy achieved by the AI during its most recent 24-hour backtest.
+- **Time Travel:** Because we store the complete lineage of historical actuals and AI predictions, the dashboard URL accepts a `?date=` parameter, allowing users to scroll back in time and view the exact state of the intelligence platform before past weather events occurred.
 
 ---
 
 ## 🏗 System Architecture
 
-The platform operates autonomously through a decoupled architecture spanning data ingestion (ETL), predictive modeling (ML), and real-time visualization (Web).
+The platform operates autonomously through a decoupled architecture spanning data ingestion (ETL), predictive modeling (ML), and real-time visualization (Web). I designed this system to prioritize continuous feedback loops, strict separation of concerns, and high resilience.
 
 ```mermaid
 graph TD
@@ -34,7 +49,7 @@ graph TD
         M1[ml_pipeline.py]
         XGB[5x XGBoost Regressors]
         SHAP[Explainability Engine]
-        DIAG[Self-Healing Diagnostics]
+        DIAG[Automated Model Recalibration]
     end
 
     subgraph Frontend Client
@@ -67,17 +82,11 @@ Following the ETL pipeline, the `ml_pipeline.py` script executes. It does **not*
 #### Why XGBoost?
 I selected XGBoost over Deep Learning models (like LSTMs) because:
 - **Tabular Superiority:** Gradient boosted trees notoriously outperform neural networks on small-to-medium tabular datasets.
-- **Explainability:** Tree-based models allow for instantaneous extraction of feature importances, completely eliminating the need for expensive post-hoc SHAP calculations.
+- **Explainability:** Tree feature importances provide lightweight global explanations, avoiding the computational overhead of generating SHAP values during every retraining cycle.
 - **Speed:** The entire pipeline (fetching, training 5 models, forecasting, and backtesting) executes in under 20 seconds on a standard GitHub Action runner.
 
-### 3. The Explainability Engine (AI Insights)
-Black-box AI is dangerous in smart city infrastructure. To solve this, the pipeline extracts the mathematical Feature Importances from the XGBoost trees instantly after training. 
-
-By analyzing which nodes split the most, the AI determines the exact "Top Driving Factors" for the current forecast. The UI then translates this (e.g., `['Humidity', 'Wind Speed']`) into a human-readable live intelligence brief: 
-> *"Current wind patterns are effectively dispersing airborne particulates."*
-
-### 4. Self-Healing Diagnostics & Failure Recovery
-Machine learning models drift. To combat this, the pipeline performs an autonomous **Backtest** every hour.
+### 3. Automated Model Recalibration (Continuous Adaptation)
+Machine learning models drift. To combat this, I designed the pipeline to perform an autonomous **Backtest** every hour to verify if the prediction is still good.
 1. It looks at the prediction it made 24 hours ago for the *current* timestamp.
 2. It compares that prediction to the *actual* telemetry we just received from the API.
 3. If the error margin exceeds a safe threshold (e.g., a sudden unexpected weather shift), the system logs an anomaly status and automatically **recalibrates** by training fresh trees on the newly mutated data patterns.
@@ -104,13 +113,19 @@ sequenceDiagram
 
 ---
 
-## 📊 Key Performance Indicators (KPIs)
+## 🚧 Engineering Challenges
 
-The frontend is built in React / Next.js and visualizes intelligence via strategic KPIs:
+### API Interval Drift
+OpenWeather and OpenAQ do not always return observations at perfectly regular intervals, leading to misaligned timestamps.
+**Solution:** Resampled all telemetry into strict hourly windows (`resample('1h').mean().interpolate()`) before training to normalize row-shifts and ensure temporal accuracy.
 
-- **Sustainability Score (0-100):** A custom composite metric. It penalizes the city for extreme PM2.5 pollution levels and extreme temperature anomalies (urban heat islands). A high score indicates a clean, thermally balanced environment.
-- **Model Accuracy Ring:** A dynamic SVG ring that plots the exact percentage of accuracy achieved by the AI during its most recent 24-hour backtest.
-- **Time Travel:** Because we store the complete lineage of historical actuals and AI predictions, the dashboard URL accepts a `?date=` parameter, allowing users to scroll back in time and view the exact state of the intelligence platform before past weather events occurred.
+### Data Sparsity
+Certain environmental metrics (like cloud cover or PM2.5 from specific stations) occasionally disappear from the API payloads.
+**Solution:** Implemented linear interpolation and robust default fallbacks before feature engineering, preventing catastrophic training failures during sensor downtime.
+
+### Cold Start
+Early versions lacked sufficient historical context to train an accurate 24-hour forecaster.
+**Solution:** Designed the automated retraining pipeline to continuously adapt and improve forecasting quality automatically as additional telemetry accumulates in the database over time.
 
 ---
 
