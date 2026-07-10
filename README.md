@@ -5,28 +5,51 @@
 ![XGBoost](https://img.shields.io/badge/XGBoost-1.7-green?logo=xgboost)
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase)
 
-**Smart City Intelligence Platform is a real-time environmental intelligence system that predicts weather conditions across five regions of Delhi, explains the reasoning behind each prediction, continuously evaluates its own performance, and automatically retrains itself when prediction quality degrades.**
+**Cities generate massive amounts of environmental data, but most weather applications simply display forecasts without explaining them or improving from their mistakes. Smart City Intelligence Platform continuously predicts, evaluates, and refines urban environmental forecasts across five regions of Delhi through an automated ML pipeline.**
 
-It actively ingests environmental telemetry, trains specialized AI models on-the-fly, and presents the intelligence on a frosted-glass interactive dashboard.
+It actively ingests API telemetry, trains specialized models on-the-fly, and presents the intelligence on a frosted-glass interactive dashboard.
+
+*(Insert 30-second Demo GIF here)*
 
 ---
 
-## 📊 Key Performance Indicators & Features
+## ✨ Features
 
-The frontend is built in React / Next.js and visualizes intelligence via strategic KPIs:
+- **Live Weather Intelligence:** Real-time data mapped to actionable insights.
+- **Automated Retraining:** Models recalibrate dynamically based on their own error margins.
+- **Explainable AI:** Feature importances are translated into natural language.
+- **Time Travel UI:** Navigate backwards in time to view past predictions and environmental states.
+- **Model Health Monitoring:** Track prediction accuracy over the last 24 hours.
+- **Sustainability Score:** A real-time index punishing pollution and urban heat islands.
 
-- **Sustainability Score (0-100):** A custom composite metric designed to evaluate the city's real-time climate health. 
-  *Formula:* `Base Score (100) - (PM2.5 Excess Penalty) - (Extreme Heat/Cold Penalty)`. It heavily penalizes the city for extreme PM2.5 pollution levels and extreme temperature anomalies (urban heat islands). A high score indicates a clean, thermally balanced environment.
-- **Explainability Engine (AI Insights):** Rather than just presenting raw numbers, the platform outputs natural intelligence. By analyzing which nodes split the most during training, the AI determines the exact "Top Driving Factors" for the current forecast and outputs readable insights like: 
-  > *"Current wind patterns are effectively dispersing airborne particulates."*
-- **Model Accuracy Ring:** A dynamic SVG ring that plots the exact percentage of accuracy achieved by the AI during its most recent 24-hour backtest.
-- **Time Travel:** Because we store the complete lineage of historical actuals and AI predictions, the dashboard URL accepts a `?date=` parameter, allowing users to scroll back in time and view the exact state of the intelligence platform before past weather events occurred.
+---
+
+## 📈 System Metrics
+
+- **5** City Zones Monitored
+- **5** Specialized ML Models
+- **1-Hour** Retraining Frequency
+- **24-Hour** Forecasting Horizon
+- **< 20 Seconds** End-to-End Pipeline Execution Time
+
+---
+
+## 🧠 Design Decisions
+
+| Decision | Why |
+| -------- | --- |
+| **XGBoost over LSTM** | Better performance on structured tabular data with significantly lower training cost and latency. |
+| **GitHub Actions over Airflow/Celery** | Simpler, serverless automation perfectly suited for a stateless ETL and retraining pipeline. |
+| **Supabase over Raw Postgres** | Managed PostgreSQL with instant REST APIs, allowing seamless integration with Next.js Server Components. |
+| **Hourly Retraining** | Balances model freshness with computational cost, correcting drift quickly without unnecessary overhead. |
+| **Five Regional Models** | Captures localized micro-climate differences (e.g., Dwarka vs. Central Delhi) instead of washing out anomalies by averaging across the entire city. |
+| **Tree Importances over SHAP** | Tree feature importances provide lightweight global explanations, avoiding the computational overhead of generating SHAP values during every retraining cycle. |
 
 ---
 
 ## 🏗 System Architecture
 
-The platform operates autonomously through a decoupled architecture spanning data ingestion (ETL), predictive modeling (ML), and real-time visualization (Web). I designed this system to prioritize continuous feedback loops, strict separation of concerns, and high resilience.
+The platform operates through a decoupled architecture spanning data ingestion (ETL), predictive modeling (ML), and real-time visualization (Web). 
 
 ```mermaid
 graph TD
@@ -48,8 +71,8 @@ graph TD
     subgraph ML Pipeline / GitHub Actions
         M1[ml_pipeline.py]
         XGB[5x XGBoost Regressors]
-        SHAP[Explainability Engine]
-        DIAG[Automated Model Recalibration]
+        SHAP[Feature Analysis]
+        DIAG[Automated Recalibration]
     end
 
     subgraph Frontend Client
@@ -70,26 +93,20 @@ graph TD
 ```
 
 ### 1. Data Ingestion (ETL)
-Every hour, a GitHub Action triggers the ETL pipeline. It queries OpenWeather and OpenAQ for current meteorological and air quality metrics across 5 specific zones (e.g., Central Delhi, Dwarka, Rohini). This forms our foundational `environmental_data` table.
+Every hour, a GitHub Action triggers the ETL pipeline. It queries OpenWeather and OpenAQ for current meteorological and air quality metrics across 5 specific zones. This forms the foundational `environmental_data` table.
 
 ### 2. Machine Learning Engine
 Following the ETL pipeline, the `ml_pipeline.py` script executes. It does **not** rely on a pre-trained, stale model. Instead, it:
 1. Pulls the latest historical data from Supabase.
 2. Resamples the data into strict 1-hour temporal blocks to normalize API intervals.
-3. Trains **five distinct XGBoost MultiOutputRegressors**, one tailored to the specific micro-climate of each zone.
+3. Trains **five distinct XGBoost MultiOutputRegressors**.
 4. Predicts weather conditions 24 hours into the future.
 
-#### Why XGBoost?
-I selected XGBoost over Deep Learning models (like LSTMs) because:
-- **Tabular Superiority:** Gradient boosted trees notoriously outperform neural networks on small-to-medium tabular datasets.
-- **Explainability:** Tree feature importances provide lightweight global explanations, avoiding the computational overhead of generating SHAP values during every retraining cycle.
-- **Speed:** The entire pipeline (fetching, training 5 models, forecasting, and backtesting) executes in under 20 seconds on a standard GitHub Action runner.
-
 ### 3. Automated Model Recalibration (Continuous Adaptation)
-Machine learning models drift. To combat this, I designed the pipeline to perform an autonomous **Backtest** every hour to verify if the prediction is still good.
-1. It looks at the prediction it made 24 hours ago for the *current* timestamp.
-2. It compares that prediction to the *actual* telemetry we just received from the API.
-3. If the error margin exceeds a safe threshold (e.g., a sudden unexpected weather shift), the system logs an anomaly status and automatically **recalibrates** by training fresh trees on the newly mutated data patterns.
+Machine learning models drift. To combat this, the pipeline performs an automated **Backtest** every hour to verify if the previous predictions hold up.
+1. It retrieves the prediction made 24 hours ago for the *current* timestamp.
+2. It compares that prediction to the *actual* telemetry just received from the API.
+3. If the error margin exceeds a safe threshold, the system logs an anomaly and automatically **recalibrates** by training fresh trees on the newly mutated data patterns.
 
 ```mermaid
 sequenceDiagram
@@ -126,6 +143,26 @@ Certain environmental metrics (like cloud cover or PM2.5 from specific stations)
 ### Cold Start
 Early versions lacked sufficient historical context to train an accurate 24-hour forecaster.
 **Solution:** Designed the automated retraining pipeline to continuously adapt and improve forecasting quality automatically as additional telemetry accumulates in the database over time.
+
+---
+
+## 📂 Repository Structure
+
+```text
+smart-city-predictor/
+├── web/                    # Next.js frontend application
+│   ├── src/
+│   │   ├── app/            # Next.js App Router (page.tsx, layout.tsx)
+│   │   └── components/     # React UI components (Dashboard.tsx)
+│   └── public/             # Static assets (images, icons)
+├── fetch_data.py           # ETL pipeline script
+├── ml_pipeline.py          # Machine learning pipeline script
+├── backfill_columns.py     # Database schema migration script
+├── requirements.txt        # Python dependencies
+└── .github/workflows/      # CI/CD & Automation
+    ├── fetch_data.yml      # Hourly ETL cron job
+    └── run_ml.yml          # Hourly ML pipeline cron job
+```
 
 ---
 
