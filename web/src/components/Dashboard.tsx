@@ -2,8 +2,9 @@
 
 import { motion } from "framer-motion";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
-import { Droplets, Thermometer, Wind, Activity, ArrowUp, ArrowDown, Cloud, Umbrella } from "lucide-react";
+import { Droplets, Thermometer, Wind, Activity, ArrowUp, ArrowDown, Cloud, Umbrella, MapPin, Brain, ShieldAlert } from "lucide-react";
 import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface EnvData {
   timestamp: string;
@@ -23,19 +24,38 @@ interface PredictionData {
   predicted_wind_speed?: number;
   predicted_cloud_cover?: number;
   will_rain_next_24h?: boolean;
+  top_factors?: string;
 }
+
+const ZONES = [
+  "Central Delhi",
+  "Dwarka",
+  "Rohini",
+  "Dabri Mor",
+  "Model Town"
+];
 
 export default function Dashboard({ 
   historicalData, 
   hourlyPredictions,
-  accuracyData = []
+  accuracyData = [],
+  currentLocation = "Central Delhi"
 }: { 
   historicalData: EnvData[], 
   hourlyPredictions: PredictionData[],
-  accuracyData?: any[]
+  accuracyData?: any[],
+  currentLocation?: string
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const latestData = historicalData[historicalData.length - 1];
   const [activeMetric, setActiveMetric] = useState<'pm25'|'temp'|'humidity'|'wind'|'clouds'>('pm25');
+
+  const handleLocationChange = (loc: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('location', loc);
+    router.push(`/?${params.toString()}`);
+  };
 
   // Determine dynamic theme and background image based on latest weather
   const temp = latestData?.temperature_c || 25;
@@ -102,9 +122,9 @@ export default function Dashboard({
     predicted_wind: d.predicted_wind_speed,
     actual_clouds: d.actual_cloud_cover,
     predicted_clouds: d.predicted_cloud_cover,
+    diagnostic: d.diagnostic_note
   }));
 
-  // Calculate dynamic accuracy percentage for the active metric
   let totalError = 0;
   let count = 0;
   
@@ -118,7 +138,7 @@ export default function Dashboard({
 
     if (actual > 0) {
       const err = Math.abs(actual - pred) / actual;
-      totalError += Math.min(err, 1); // Cap error penalty at 100% per point
+      totalError += Math.min(err, 1);
       count++;
     } else if (actual === 0 && pred > 0) {
       totalError += 1;
@@ -146,71 +166,115 @@ export default function Dashboard({
   const status = getAQIStatus(latestData?.pm25 || 0);
   const formatTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   
-  const maxTempObj = hourlyPredictions.reduce((max, p) => p.predicted_temp > max.predicted_temp ? p : max, hourlyPredictions[0]);
-  const minTempObj = hourlyPredictions.reduce((min, p) => p.predicted_temp < min.predicted_temp ? p : min, hourlyPredictions[0]);
+  const maxTempObj = hourlyPredictions.length > 0 ? hourlyPredictions.reduce((max, p) => p.predicted_temp > max.predicted_temp ? p : max, hourlyPredictions[0]) : null;
+  const minTempObj = hourlyPredictions.length > 0 ? hourlyPredictions.reduce((min, p) => p.predicted_temp < min.predicted_temp ? p : min, hourlyPredictions[0]) : null;
   
-  // Is rain expected globally?
   const willRain = hourlyPredictions.length > 0 ? hourlyPredictions[0].will_rain_next_24h : false;
-
-  // Filter 48 points down to 24 points (one per hour) for the cards at the bottom
-  const hourlyCards = hourlyPredictions.filter((_, i) => i % 2 === 0);
+  const topFactors = hourlyPredictions.length > 0 ? hourlyPredictions[0].top_factors : "N/A";
+  const latestDiagnostic = accuracyChartData.length > 0 ? accuracyChartData[accuracyChartData.length - 1].diagnostic : "Stable";
 
   return (
-    <div className={`relative min-h-screen w-full transition-colors duration-1000 overflow-hidden ${themeClass}`}>
-      
+    <div className={`relative min-h-screen w-full transition-colors duration-1000 overflow-hidden pb-12 ${themeClass}`}>
       <div className="absolute -top-16 -left-16 pointer-events-none opacity-50 z-0 mix-blend-multiply [mask-image:radial-gradient(circle_at_center,black_30%,transparent_65%)] [-webkit-mask-image:radial-gradient(circle_at_center,black_30%,transparent_65%)]">
         <img src={bgImage} alt="Weather" className="w-[500px] h-[500px] object-contain" />
       </div>
 
-      <div className="relative z-10 w-full max-w-6xl mx-auto space-y-8 p-4 md:p-8">
-        {/* Header */}
+      <div className="relative z-10 w-full max-w-6xl mx-auto space-y-6 p-4 md:p-8">
+        
+        {/* Header and Zone Selector */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4"
+          className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8"
         >
           <div>
-            <h1 className="text-4xl font-extrabold tracking-tight mb-2">Delhi Air & Climate</h1>
-            <p className="opacity-70 font-medium text-lg">Next-Gen 24-Hour ML Forecast</p>
+            <h1 className="text-4xl font-extrabold tracking-tight mb-2">Smart City Intelligence</h1>
+            <p className="opacity-70 font-medium text-lg">Next-Gen Autonomous V2.0 Platform</p>
           </div>
-          <div className="flex flex-col items-end gap-2">
-             <div className={`flex items-center space-x-3 px-5 py-2.5 rounded-full ${cardClass}`}>
-              <div className={`w-3 h-3 rounded-full animate-pulse ${status.dot}`} />
-              <span className={`font-bold ${status.color}`}>AQI: {status.text}</span>
-            </div>
-            {willRain !== undefined && (
-               <div className={`flex items-center space-x-2 px-5 py-2.5 rounded-full ${cardClass}`}>
-                 <Umbrella className={`w-4 h-4 ${willRain ? 'text-blue-600' : 'text-slate-400'}`} />
-                 <span className={`font-bold ${willRain ? 'text-blue-600' : 'text-slate-500'}`}>
-                    Rain Expected: {willRain ? 'YES' : 'NO'}
-                 </span>
-               </div>
-            )}
+          <div className="flex flex-wrap items-center gap-2">
+            {ZONES.map(zone => (
+              <button
+                key={zone}
+                onClick={() => handleLocationChange(zone)}
+                className={`px-4 py-2 rounded-full font-bold text-sm transition-all flex items-center shadow-sm ${
+                  currentLocation === zone 
+                    ? "bg-slate-900 text-white shadow-lg scale-105" 
+                    : "bg-white/70 hover:bg-white text-slate-600 backdrop-blur-md"
+                }`}
+              >
+                {currentLocation === zone && <MapPin className="w-4 h-4 mr-2" />}
+                {zone}
+              </button>
+            ))}
           </div>
         </motion.div>
 
-        {/* Peaks Section */}
+        {/* Intelligence / Context Bar */}
         <motion.div 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.1 }}
           className="flex flex-wrap gap-4"
         >
-          <div className={`flex items-center px-4 py-2 rounded-lg ${cardClass}`}>
-            <Thermometer className="w-4 h-4 mr-2 text-orange-600" />
-            <span className="text-sm font-semibold opacity-80 mr-4">Temp Peaks:</span>
-            <div className="flex items-center text-red-600 mr-4">
-              <ArrowUp className="w-4 h-4" /> 
-              <span className="font-bold">{maxTempObj.predicted_temp.toFixed(1)}°C</span>
-              <span className="text-xs ml-1 opacity-70">at {formatTime(maxTempObj.target_timestamp)}</span>
-            </div>
-            <div className="flex items-center text-blue-600">
-              <ArrowDown className="w-4 h-4" /> 
-              <span className="font-bold">{minTempObj.predicted_temp.toFixed(1)}°C</span>
-              <span className="text-xs ml-1 opacity-70">at {formatTime(minTempObj.target_timestamp)}</span>
-            </div>
+          <div className={`flex items-center px-5 py-2.5 rounded-full ${cardClass}`}>
+            <div className={`w-3 h-3 rounded-full animate-pulse mr-3 ${status.dot}`} />
+            <span className={`font-bold uppercase tracking-wider ${status.color}`}>AQI: {status.text}</span>
           </div>
+
+          {willRain !== undefined && (
+             <div className={`flex items-center px-5 py-2.5 rounded-full ${cardClass}`}>
+               <Umbrella className={`w-4 h-4 mr-2 ${willRain ? 'text-blue-600' : 'text-slate-400'}`} />
+               <span className={`font-bold uppercase tracking-wider ${willRain ? 'text-blue-600' : 'text-slate-500'}`}>
+                  Rain Expected: {willRain ? 'YES' : 'NO'}
+               </span>
+             </div>
+          )}
+
+          {maxTempObj && minTempObj && (
+            <div className={`flex items-center px-4 py-2 rounded-full ${cardClass}`}>
+              <Thermometer className="w-4 h-4 mr-2 text-orange-600" />
+              <div className="flex items-center text-red-600 mr-4">
+                <ArrowUp className="w-3 h-3 mr-1" /> 
+                <span className="font-bold">{maxTempObj.predicted_temp.toFixed(1)}°</span>
+              </div>
+              <div className="flex items-center text-blue-600">
+                <ArrowDown className="w-3 h-3 mr-1" /> 
+                <span className="font-bold">{minTempObj.predicted_temp.toFixed(1)}°</span>
+              </div>
+            </div>
+          )}
         </motion.div>
+
+        {/* AI Diagnostics & Explainability */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2 }}
+            className={`p-5 rounded-2xl ${cardClass} flex flex-col justify-center`}
+          >
+            <div className="flex items-center text-slate-500 text-sm font-bold uppercase tracking-wide mb-2">
+              <Brain className="w-4 h-4 mr-2 text-purple-500" /> Explainability Engine
+            </div>
+            <p className="text-xl font-medium leading-tight">
+              Top driving factors in <span className="font-bold">{currentLocation}</span> right now are <span className="text-purple-600 font-bold">{topFactors}</span>.
+            </p>
+          </motion.div>
+
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.3 }}
+            className={`p-5 rounded-2xl ${cardClass} flex flex-col justify-center`}
+          >
+            <div className="flex items-center text-slate-500 text-sm font-bold uppercase tracking-wide mb-2">
+              <ShieldAlert className={`w-4 h-4 mr-2 ${latestDiagnostic.includes("Error") ? "text-red-500" : "text-emerald-500"}`} /> Model Diagnostics
+            </div>
+            <p className={`text-xl font-medium leading-tight ${latestDiagnostic.includes("Error") ? "text-red-600" : "text-emerald-600"}`}>
+              {latestDiagnostic}
+            </p>
+          </motion.div>
+        </div>
 
         {/* Main Grid */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -227,7 +291,7 @@ export default function Dashboard({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 * i }}
               onClick={() => setActiveMetric(metric.id as any)}
-              className={`${cardClass} p-4 md:p-6 rounded-2xl cursor-pointer transition-all duration-300 hover:scale-[1.02] ${activeMetric === metric.id ? 'ring-2 ring-blue-500 bg-white/90' : ''}`}
+              className={`${cardClass} p-4 md:p-6 rounded-2xl cursor-pointer transition-all duration-300 hover:scale-[1.02] ${activeMetric === metric.id ? 'ring-2 ring-blue-500 bg-white/90 shadow-2xl' : ''}`}
             >
               <div className="flex justify-between items-start">
                 <div>
@@ -252,7 +316,7 @@ export default function Dashboard({
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
             <h2 className="text-xl font-bold flex items-center">
               <Activity className="w-5 h-5 mr-2 opacity-70" />
-              24-Hour Predictive Curve (48 Points)
+              24-Hour Predictive Curve ({currentLocation})
             </h2>
             <div className="flex space-x-2 text-sm font-bold">
               <span className="flex items-center"><div className="w-3 h-3 rounded-full bg-blue-600 mr-2"/> Actual</span>
@@ -316,18 +380,18 @@ export default function Dashboard({
           </div>
         </motion.div>
 
-        {/* Detailed Hourly Forecast Cards (Only 24 points shown) */}
+        {/* Detailed Hourly Forecast Cards */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
         >
           <h2 className="text-xl font-bold mb-4 flex items-center">
-             Detailed 24-Hour Breakdown (Hourly)
+             Detailed 24-Hour Timeline
           </h2>
           <div className="overflow-x-auto pb-4 custom-scrollbar">
             <div className="flex space-x-4 w-max">
-              {hourlyCards.map((p, idx) => (
+              {hourlyPredictions.map((p, idx) => (
                 <div key={idx} className={`${cardClass} p-4 rounded-2xl w-32 flex-shrink-0 text-center hover:-translate-y-1 transition-transform`}>
                   <p className="font-bold text-sm mb-3 opacity-80 border-b border-black/5 pb-2">
                     {formatTime(p.target_timestamp)}
