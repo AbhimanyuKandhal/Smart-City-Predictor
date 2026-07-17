@@ -96,10 +96,14 @@ export default function Dashboard({
   let cardClass = "bg-white/60 backdrop-blur-xl border border-slate-200 shadow-xl";
   let bgImage = "/sun.png";
 
-  if (isRaining || (humidity > 70 && cloudCover > 60)) {
+  if (isRaining || (humidity > 85 && cloudCover > 80)) {
     themeClass = "bg-gradient-to-br from-slate-200 via-blue-100 to-indigo-100 text-slate-900";
     cardClass = "bg-white/60 backdrop-blur-xl border border-blue-300 shadow-xl";
     bgImage = "/rain.png";
+  } else if (cloudCover > 70) {
+    themeClass = "bg-gradient-to-br from-slate-300 via-slate-200 to-slate-100 text-slate-900";
+    cardClass = "bg-white/60 backdrop-blur-xl border border-slate-300 shadow-xl";
+    bgImage = "/cloud.png";
   } else if (aqi > 150) {
     themeClass = "bg-gradient-to-br from-stone-200 via-yellow-100 to-orange-100 text-stone-900";
     cardClass = "bg-white/50 backdrop-blur-xl border border-yellow-300 shadow-xl";
