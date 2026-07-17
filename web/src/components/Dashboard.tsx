@@ -193,10 +193,26 @@ export default function Dashboard({
     return '#475569';
   };
 
+  const calculateAQI = (pm25: number) => {
+    // US EPA standard conversion from PM2.5 to AQI
+    if (pm25 <= 12.0) return Math.round((50 - 0) / (12.0 - 0) * (pm25 - 0) + 0);
+    if (pm25 <= 35.4) return Math.round((100 - 51) / (35.4 - 12.1) * (pm25 - 12.1) + 51);
+    if (pm25 <= 55.4) return Math.round((150 - 101) / (55.4 - 35.5) * (pm25 - 35.5) + 101);
+    if (pm25 <= 150.4) return Math.round((200 - 151) / (150.4 - 55.5) * (pm25 - 55.5) + 151);
+    if (pm25 <= 250.4) return Math.round((300 - 201) / (250.4 - 150.5) * (pm25 - 150.5) + 201);
+    if (pm25 <= 350.4) return Math.round((400 - 301) / (350.4 - 250.5) * (pm25 - 250.5) + 301);
+    if (pm25 <= 500.4) return Math.round((500 - 401) / (500.4 - 350.5) * (pm25 - 350.5) + 401);
+    return 500; // Max out at 500
+  };
+
   const getAQIStatus = (pm25: number) => {
-    if (pm25 <= 12) return { text: "Good", color: "text-emerald-600", dot: "bg-emerald-500" };
-    if (pm25 <= 35.4) return { text: "Moderate", color: "text-amber-600", dot: "bg-amber-500" };
-    return { text: "Unhealthy", color: "text-red-600", dot: "bg-red-500" };
+    const aqiNum = calculateAQI(pm25);
+    if (aqiNum <= 50) return { num: aqiNum, text: "Good", color: "text-emerald-600", dot: "bg-emerald-500" };
+    if (aqiNum <= 100) return { num: aqiNum, text: "Moderate", color: "text-amber-600", dot: "bg-amber-500" };
+    if (aqiNum <= 150) return { num: aqiNum, text: "Unhealthy for Sensitive", color: "text-orange-600", dot: "bg-orange-500" };
+    if (aqiNum <= 200) return { num: aqiNum, text: "Unhealthy", color: "text-red-600", dot: "bg-red-500" };
+    if (aqiNum <= 300) return { num: aqiNum, text: "Very Unhealthy", color: "text-purple-600", dot: "bg-purple-500" };
+    return { num: aqiNum, text: "Hazardous", color: "text-rose-900", dot: "bg-rose-900" };
   };
 
   const status = getAQIStatus(latestData?.pm25 || 0);
@@ -282,7 +298,7 @@ export default function Dashboard({
         >
           <div className={`flex items-center px-5 py-2.5 rounded-full ${cardClass}`}>
             <div className={`w-3 h-3 rounded-full animate-pulse mr-3 ${status.dot}`} />
-            <span className={`font-bold uppercase tracking-wider ${status.color}`}>AQI: {status.text}</span>
+            <span className={`font-bold uppercase tracking-wider ${status.color}`}>AQI {status.num}: {status.text}</span>
           </div>
 
           {willRain !== undefined && (
