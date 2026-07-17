@@ -89,11 +89,14 @@ export default function Dashboard({
     return "text-red-600";
   };
   
+  const currentHour = latestData ? new Date(latestData.timestamp).getHours() : 12;
+  const isNight = currentHour >= 19 || currentHour <= 5;
+  
   let themeClass = "bg-gradient-to-br from-blue-50 to-slate-100 text-slate-900"; 
   let cardClass = "bg-white/60 backdrop-blur-xl border border-slate-200 shadow-xl";
   let bgImage = "/sun.png";
 
-  if (isRaining || (humidity > 80 && temp > 15 && cloudCover > 70)) {
+  if (isRaining || (humidity > 70 && cloudCover > 60)) {
     themeClass = "bg-gradient-to-br from-slate-200 via-blue-100 to-indigo-100 text-slate-900";
     cardClass = "bg-white/60 backdrop-blur-xl border border-blue-300 shadow-xl";
     bgImage = "/rain.png";
@@ -105,6 +108,10 @@ export default function Dashboard({
     themeClass = "bg-gradient-to-br from-slate-100 via-blue-50 to-cyan-100 text-slate-900";
     cardClass = "bg-white/60 backdrop-blur-xl border border-cyan-200 shadow-xl";
     bgImage = "/snow.png";
+  } else if (isNight) {
+    themeClass = "bg-gradient-to-br from-indigo-200 via-blue-200 to-slate-300 text-slate-900";
+    cardClass = "bg-white/60 backdrop-blur-xl border border-indigo-300 shadow-xl";
+    bgImage = "/moon.png";
   } else if (temp > 35) {
     themeClass = "bg-gradient-to-br from-amber-100 via-orange-100 to-red-100 text-amber-950";
     cardClass = "bg-white/60 backdrop-blur-xl border border-orange-300 shadow-xl";
